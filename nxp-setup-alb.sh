@@ -29,13 +29,13 @@
 # and practice showed that there is no simple generic way to get the
 # script name when sourced (we can't rely on using built-in variables
 # $0, $_, $BASH_SOURCE since they behave differently or are not always available)
-PROGNAME="nxp-setup-alb.sh"
+PROG_NAME="nxp-setup-alb.sh"
 
 # This defines which machine conf files we ignore for the underlying SDK
-MACHINEEXCLUSION="^imx|^twr"
+MACHINE_EXCLUSION="^imx|^twr"
 # Which machine types are ARM based and need the linaro toolchain?
 # This should be done properly by checking the conf files, really
-ARMMACHINE="^ls|^s32|^lx"
+ARM_MACHINE="^ls|^s32|^lx"
 
 
 DEFAULT_DISTRO="fsl-auto"
@@ -45,70 +45,31 @@ COMPANY="NXP"
 BBLSMACHINE=".+bbmini|.+bluebox.+|ls.+|lx.+"
 
 # Any Ubuntu machine type
-UBUNTUMACHINE=".+ubuntu"
+UBUNTU_MACHINE=".+ubuntu"
 
 # Supported yocto version
-YOCTOVERSION="kirkstone"
+YOCTO_VERSION="kirkstone"
 
 # Error codes
 EINVAL=128
 
-if [ -z "$ZSH_NAME" ] && echo "$0" | grep -q "$PROGNAME"; then
-    echo "ERROR: This script needs to be sourced."
-    SCRIPT_PATH=`readlink -f $0`
-    if [ "`readlink $SHELL`" = "dash" ];then
-        echo "Try run command \"set -- -h; . $SCRIPT_PATH\" to get help."
-    else
-        echo "Try run command \". $SCRIPT_PATH -h\" to get help."
-    fi
-    unset SCRIPT_PATH PROGNAME
-    exit
-else
-    if [ -n "$BASH_SOURCE" ]; then
-        ROOTDIR="`readlink -f $BASH_SOURCE | xargs dirname`"
-    elif [ -n "$ZSH_NAME" ]; then
-        ROOTDIR="`readlink -f $0 | xargs dirname`"
-    else
-        ROOTDIR="`readlink -f $PWD | xargs dirname`"
-    fi
-    if ! [ -e "$ROOTDIR/$PROGNAME" ];then
-        echo "Go to where $PROGNAME locates, then run: . $PROGNAME <args>"
-        unset ROOTDIR PROGNAME
-        return
-    fi
-fi
-
-SOURCESDIR="sources"
-ALBROOTDIR=${ROOTDIR}/${SOURCESDIR}/meta-alb
-
-# Validate by size that this file is (the same as) the original one in meta-alb
-ORIGINALFILE="`find \"$ALBROOTDIR\" -name $PROGNAME`"
-if [ -e "$ORIGINALFILE" ]; then
-
-    PROGSIZE=`ls -l "$ROOTDIR/$PROGNAME" | cut -d' ' -f 5`
-    ORIGINALSIZE=`ls -l "$ORIGINALFILE" | cut -d' ' -f 5`
-
-    if [ "$PROGSIZE" -ne "$ORIGINALSIZE" ]; then
-        echo "Found original script: \"$ORIGINALFILE\""
-        echo "WARNING: original script \"$ORIGINALFILE\" is different from the script you are running"
-        echo "Please update this script (\"$ROOTDIR/$PROGNAME\") or source directly \"$ORIGINALFILE\""
-        return
-    fi
-fi
+ROOT_DIR=$(dirname $(readlink -f "\$0"))
+SOURCES_DIR="sources"
+ALB_ROOT_DIR=${ROOT_DIR}/${SOURCES_DIR}/meta-alb
 
 # Check if current user is root
 if [ "$(whoami)" = "root" ]; then
     echo "ERROR: Do not use the BSP as root. Exiting..."
-    unset ROOTDIR PROGNAME
+    unset ROOT_DIR PROG_NAME
     return
 fi
 
-OEROOTDIR=${ROOTDIR}/${SOURCESDIR}/poky
-if [ -e ${ROOTDIR}/${SOURCESDIR}/oe-core ]; then
-    OEROOTDIR=${ROOTDIR}/${SOURCESDIR}/oe-core
+OE_ROOT_DIR=${ROOT_DIR}/${SOURCES_DIR}/poky
+if [ -e ${ROOT_DIR}/${SOURCES_DIR}/oe-core ]; then
+    OE_ROOT_DIR=${ROOT_DIR}/${SOURCES_DIR}/oe-core
 fi
-FSLROOTDIR=${ROOTDIR}/${SOURCESDIR}/meta-freescale
-PROJECT_DIR=${ROOTDIR}/build_${MACHINE}
+FSL_ROOT_DIR=${ROOT_DIR}/${SOURCES_DIR}/meta-freescale
+PROJECT_DIR=${ROOT_DIR}/build_${MACHINE}
 
 prompt_message () {
 local i=''
@@ -125,7 +86,7 @@ You can now run 'bitbake <target>'
 "
     echo "Targets specific to ${COMPANY}:"
     for layer in $(echo $LAYER_LIST | xargs); do
-        fsl_recipes=$(find ${ROOTDIR}/${SOURCESDIR}/$layer -path "*recipes-*/images/fsl*.bb" -or -path "images/fsl*.bb" 2> /dev/null)
+        fsl_recipes=$(find ${ROOT_DIR}/${SOURCES_DIR}/$layer -path "*recipes-*/images/fsl*.bb" -or -path "images/fsl*.bb" 2> /dev/null)
         if [ -n "$fsl_recipes" ]
         then
             for i in $(echo $fsl_recipes | xargs);do
@@ -142,27 +103,27 @@ You can now run 'bitbake <target>'
 
 clean_up()
 {
-   unset PROGNAME ROOTDIR OEROOTDIR FSLROOTDIR PROJECT_DIR \
-         EULA EULA_FILE LAYER_LIST MACHINE FSLDISTRO \
+   unset PROG_NAME ROOT_DIR OE_ROOT_DIR FSL_ROOT_DIR PROJECT_DIR \
+         LAYER_LIST MACHINE FSLDISTRO \
          OLD_OPTIND CPUS JOBS THREADS DOWNLOADS CACHES DISTRO \
          setup_flag setup_h setup_j setup_t setup_l setup_builddir \
          setup_download setup_sstate setup_error layer append_layer \
-         extra_layers distro_override MACHINELAYER MACHINEEXCLUSION \
-         ARMMACHINE
+         extra_layers distro_override MACHINE_LAYER MACHINE_EXCLUSION \
+         ARM_MACHINE
 
    unset -f usage prompt_message
 }
 
 usage() {
-    echo "Usage: . $PROGNAME -m <machine>"
-    ls $FSLROOTDIR/conf/machine/*.conf > /dev/null 2>&1
+    echo "Usage: . $PROG_NAME -m <machine>"
+    ls $FSL_ROOT_DIR/conf/machine/*.conf > /dev/null 2>&1
 
     if [ $? -eq 0 ]; then
         echo -n -e "\n    Supported machines: "
         for layer in $(eval echo $USAGE_LIST); do
-            if [ -d ${ROOTDIR}/${SOURCESDIR}/${layer}/conf/machine ]; then
-                echo -n -e "`ls ${ROOTDIR}/${SOURCESDIR}/${layer}/conf/machine | grep "\.conf" \
-                   | egrep -v "^${MACHINEEXCLUSION}" | sed s/\.conf//g | xargs echo` "
+            if [ -d ${ROOT_DIR}/${SOURCES_DIR}/${layer}/conf/machine ]; then
+                echo -n -e "`ls ${ROOT_DIR}/${SOURCES_DIR}/${layer}/conf/machine | grep "\.conf" \
+                   | egrep -v "^${MACHINE_EXCLUSION}" | sed s/\.conf//g | xargs echo` "
             fi
         done
         echo ""
@@ -189,7 +150,7 @@ usage() {
     To workaround this limitation, use \"set -- args\" prior to
     sourcing this script. For exmaple:
         \$ set -- -m s32g274ardb2 -j 3 -t 2
-        \$ . $ROOTDIR/$PROGNAME
+        \$ . $ROOT_DIR/$PROG_NAME
 "
     fi
 }
@@ -206,7 +167,7 @@ add_layers_for_machines()
     echo ${MACHINE} | egrep -q "${PARAM_MACHINE_LIST}"
     if [ $? -eq 0 ]; then
         for layer in $(eval echo ${PARAM_LAYER_LIST}); do
-            if [ -e "${ROOTDIR}/${SOURCESDIR}/${layer}" ]; then
+            if [ -e "${ROOT_DIR}/${SOURCES_DIR}/${layer}" ]; then
                 LAYER_LIST="$LAYER_LIST \
                     $layer \
                 "
@@ -217,7 +178,7 @@ add_layers_for_machines()
 
 is_not_ubuntu_machine()
 {
-    echo ${MACHINE} | egrep -q "${UBUNTUMACHINE}"
+    echo ${MACHINE} | egrep -q "${UBUNTU_MACHINE}"
     return $?
 }
 
@@ -282,6 +243,7 @@ LAYER_LIST=" \
     meta-security \
     \
     meta-freescale \
+    meta-alpha \
 "
 
 LSLAYERS=" \
@@ -295,7 +257,7 @@ USAGE_LIST="$LAYER_LIST \
 "
 
 # Really, conf files should be checked and not the machine name ...
-echo ${MACHINE} | egrep -q "${ARMMACHINE}"
+echo ${MACHINE} | egrep -q "${ARM_MACHINE}"
 if [ $? -eq 0 ]; then
     add_layers_for_machines "${LSLAYERS}" "${BBLSMACHINE}"
 
@@ -304,9 +266,6 @@ if [ $? -eq 0 ]; then
     $ALB_LAYER_LIST \
     "
 fi
- 
-
-EULA_FILE="$ALBROOTDIR/EULA"
 
 # check the "-h" and other not supported options
 if test $setup_error || test $setup_h; then
@@ -324,12 +283,12 @@ if [ -z "$DISTRO" ]; then
 fi
 
 # Check the machine type specified
-# Note that we intentionally do not test ${MACHINEEXCLUSION}
-unset MACHINELAYER
+# Note that we intentionally do not test ${MACHINE_EXCLUSION}
+unset MACHINE_LAYER
 if [ -n "${MACHINE}" ]; then
     for layer in $(eval echo $LAYER_LIST); do
-        if [ -e ${ROOTDIR}/${SOURCESDIR}/${layer}/conf/machine/${MACHINE}.conf ]; then
-            MACHINELAYER="${ROOTDIR}/${SOURCESDIR}/${layer}"
+        if [ -e ${ROOT_DIR}/${SOURCES_DIR}/${layer}/conf/machine/${MACHINE}.conf ]; then
+            MACHINE_LAYER="${ROOT_DIR}/${SOURCES_DIR}/${layer}"
             break
         fi
     done
@@ -337,7 +296,7 @@ else
     usage && clean_up && return $EINVAL
 fi
 
-if [ -n "${MACHINELAYER}" ]; then 
+if [ -n "${MACHINE_LAYER}" ]; then 
     echo "Configuring for ${MACHINE} and distro ${DISTRO}..."
 else
     echo -e "\nThe \$MACHINE you have specified ($MACHINE) is not supported by this build setup."
@@ -365,7 +324,7 @@ if [ -n "$setup_builddir" ]; then
         PROJECT_DIR="`pwd`/${setup_builddir}"
     fi
 else
-    PROJECT_DIR=${ROOTDIR}/build_${MACHINE}
+    PROJECT_DIR=${ROOT_DIR}/build_${MACHINE}
 fi
 mkdir -p $PROJECT_DIR
 
@@ -376,7 +335,7 @@ if [ -n "$setup_download" ]; then
         DOWNLOADS="`pwd`/${setup_download}"
     fi
 else
-    DOWNLOADS="$ROOTDIR/downloads"
+    DOWNLOADS="$ROOT_DIR/downloads"
 fi
 mkdir -p $DOWNLOADS
 DOWNLOADS=`readlink -f "$DOWNLOADS"`
@@ -390,9 +349,9 @@ if [ -n "$setup_sstate" ]; then
 else
     is_not_ubuntu_machine
     if [ $? -eq 1 ]; then
-        CACHES="$ROOTDIR/sstate-cache"
+        CACHES="$PROJECT_DIR/sstate-cache"
     else
-        CACHES="$ROOTDIR/sstate-cache-ubuntu"
+        CACHES="$PROJECT_DIR/sstate-cache-ubuntu"
     fi
 fi
 mkdir -p $CACHES
@@ -407,14 +366,14 @@ if [ -e "$PROJECT_DIR/SOURCE_THIS" ]; then
 fi
 
 # source oe-init-build-env to init build env
-cd $OEROOTDIR
+cd $OE_ROOT_DIR
 set -- $PROJECT_DIR
 . ./oe-init-build-env > /dev/null
 
 # if conf/local.conf not generated, no need to go further
 if [ ! -e conf/local.conf ]; then
     echo "ERROR: the local.conf is not created, Exit ..."
-    clean_up && cd $ROOTDIR && return
+    clean_up && cd $ROOT_DIR && return
 fi
 
 # Remove comment lines and empty lines
@@ -433,8 +392,8 @@ export PATH="`echo $PATH | sed 's/\(:.\|:\)*:/:/g;s/^.\?://;s/:.\?$//'`"
 # add layers
 for layer in $(eval echo $LAYER_LIST); do
     append_layer=""
-    if [ -e ${ROOTDIR}/${SOURCESDIR}/${layer} ]; then
-        append_layer="${ROOTDIR}/${SOURCESDIR}/${layer}"
+    if [ -e ${ROOT_DIR}/${SOURCES_DIR}/${layer} ]; then
+        append_layer="${ROOT_DIR}/${SOURCES_DIR}/${layer}"
     fi
     if [ -n "${append_layer}" ]; then
         append_layer=`readlink -f $append_layer`
@@ -445,10 +404,10 @@ for layer in $(eval echo $LAYER_LIST); do
         # check if layer is compatible with supported yocto version.
         # if not, make it so.
         conffile_path="${append_layer}/conf/layer.conf"
-        yocto_compatible=`grep "LAYERSERIES_COMPAT" "${conffile_path}" | grep "${YOCTOVERSION}"`
+        yocto_compatible=`grep "LAYERSERIES_COMPAT" "${conffile_path}" | grep "${YOCTO_VERSION}"`
         if [ -z "${yocto_compatible}" ]; then
-		    sed -E "/LAYERSERIES_COMPAT/s/(\".*)\"/\1 $YOCTOVERSION\"/g" -i "${conffile_path}"
-		    echo Layer ${layer} updated for ${YOCTOVERSION}.
+		    sed -E "/LAYERSERIES_COMPAT/s/(\".*)\"/\1 $YOCTO_VERSION\"/g" -i "${conffile_path}"
+		    echo Layer ${layer} updated for ${YOCTO_VERSION}.
 		fi
     fi
 done
@@ -481,58 +440,10 @@ if echo "$MACHINE" |egrep -q "^(b4|p5|t1|t2|t4)"; then
     sed -i s/image-mklibs.image-prelink/image-mklibs/g conf/local.conf
 fi
 
-# Handle EULA setting
-if [ -z "$EULA" ] && ! grep -q '^ACCEPT_FSL_EULA\s*=' conf/local.conf; then
-    EULA='ask'
-fi
-
-if [ "$EULA" = "ask" ]; then
-    cat <<EOF
-
-Proprietary and third party software is subject to agreement and compliance
-with, ${COMPANY}'s End User License Agreement. To have the right to use these
-binaries in your images, you must read and accept the following terms.  If
-there are conflicting terms embedded in the software, the terms embedded in
-the Software will control.
-
-In all cases,  open source software is licensed under the terms of the
-applicable open source license(s), such as the BSD License, Apache License or
-the GNU Lesser General Public License.  Your use of the open source software
-is subject to the terms of each applicable license.  You must agree to the
-terms of each applicable license, or you cannot use the open source software.
-
-EOF
-
-    sleep 5
-
-    more -d $EULA_FILE
-    echo
-    while [ "$EULA" = "ask" ]; do
-        echo -n "Do you accept the EULA you just read? (y/n) "
-        read REPLY
-        case "$REPLY" in
-            y|Y)
-            echo "EULA has been accepted."
-            EULA="1"
-            ;;
-            n|N)
-            echo "EULA has not been accepted."
-            EULA="0"
-            ;;
-        esac
-    done
-fi
-
-if grep -q '^ACCEPT_FSL_EULA\s*=' conf/local.conf; then
-    sed -i "s/^#*ACCEPT_FSL_EULA\s*=.*/ACCEPT_FSL_EULA = \"$EULA\"/g" conf/local.conf
-else
-    echo "ACCEPT_FSL_EULA = \"$EULA\"" >> conf/local.conf
-fi
-
 # make a SOURCE_THIS file
 if [ ! -e SOURCE_THIS ]; then
     echo "#!/bin/sh" >> SOURCE_THIS
-    echo "cd $OEROOTDIR" >> SOURCE_THIS
+    echo "cd $OE_ROOT_DIR" >> SOURCE_THIS
     echo "set -- $PROJECT_DIR" >> SOURCE_THIS
     echo ". ./oe-init-build-env > /dev/null" >> SOURCE_THIS
     echo "echo \"Back to build project $PROJECT_DIR.\"" >> SOURCE_THIS
