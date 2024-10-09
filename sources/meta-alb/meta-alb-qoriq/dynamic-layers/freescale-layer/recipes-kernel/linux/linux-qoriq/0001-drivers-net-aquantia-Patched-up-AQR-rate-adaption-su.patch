@@ -1,0 +1,518 @@
+From 0387d7bfed237c18f866f030f1b99829a1966dc4 Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Sun, 3 Dec 2023 21:20:25 +0100
+Subject: [PATCH] drivers/net/aquantia: Patched up AQR rate adaption support
+
+The existing code, when used with an XFI/10GBASE- link to the MAC,
+killed the multirate capability of the AQR405/107. While this is not a
+full multirate patch in the sense that the PHY infrastructure knows
+about everything, it aligns more to AQR107 capabilities and does not
+mess up the default provisioning for 1G links anymore. We essentially
+rely on PAUSE frames for this patch to work. Basic connectivity is
+better than no connectivity however.
+
+On the 405, it just assumes the PHY is configured for rate adapation.
+On the 107/109/113 it checks if rate adaption is enabled in the PHY
+and then permits lower speed operation on the line.
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+---
+ drivers/net/phy/aquantia_main.c | 343 +++++++++++++++++++++++---------
+ 1 file changed, 244 insertions(+), 99 deletions(-)
+
+diff --git a/drivers/net/phy/aquantia_main.c b/drivers/net/phy/aquantia_main.c
+index c0976adbe0df..bd6cb1329c79 100644
+--- a/drivers/net/phy/aquantia_main.c
++++ b/drivers/net/phy/aquantia_main.c
+@@ -22,8 +22,8 @@
+ #define PHY_ID_AQR107	0x03a1b4e0
+ #define PHY_ID_AQCS109	0x03a1b5c2
+ #define PHY_ID_AQR405	0x03a1b4b0
+-#define PHY_ID_AQR112	0x03a1b662
+-#define PHY_ID_AQR412	0x03a1b712
++#define PHY_ID_AQR113C	0x31c31c12
++#define PHY_ID_AQR113	0x31c31c42
+ 
+ #define MDIO_PHYXS_VEND_IF_STATUS		0xe812
+ #define MDIO_PHYXS_VEND_IF_STATUS_TYPE_MASK	GENMASK(7, 3)
+@@ -33,12 +33,11 @@
+ #define MDIO_PHYXS_VEND_IF_STATUS_TYPE_SGMII	6
+ #define MDIO_PHYXS_VEND_IF_STATUS_TYPE_OCSGMII	10
+ 
+-#define MDIO_PHYXS_VEND_PROV2			0xC441
+-#define MDIO_PHYXS_VEND_PROV2_USX_AN		BIT(3)
+-
+ #define MDIO_AN_VEND_PROV			0xc400
+ #define MDIO_AN_VEND_PROV_1000BASET_FULL	BIT(15)
+ #define MDIO_AN_VEND_PROV_1000BASET_HALF	BIT(14)
++#define MDIO_AN_VEND_PROV_5000BASET_FULL	BIT(11)
++#define MDIO_AN_VEND_PROV_2500BASET_FULL	BIT(10)
+ #define MDIO_AN_VEND_PROV_DOWNSHIFT_EN		BIT(4)
+ #define MDIO_AN_VEND_PROV_DOWNSHIFT_MASK	GENMASK(3, 0)
+ #define MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT	4
+@@ -93,6 +92,22 @@
+ #define VEND1_GLOBAL_FW_ID_MAJOR		GENMASK(15, 8)
+ #define VEND1_GLOBAL_FW_ID_MINOR		GENMASK(7, 0)
+ 
++#define VEND1_GLOBAL_SYS_CFG_STARTUP_RATE	0x031a
++#define VEND1_GLOBAL_SYS_CFG_STARTUP_RATE_MASK	GENMASK(3, 0)
++#define VEND1_GLOBAL_SYS_CFG_100M		0x031b
++#define VEND1_GLOBAL_SYS_CFG_1G			0x031c
++#define VEND1_GLOBAL_SYS_CFG_2G5		0x031d
++#define VEND1_GLOBAL_SYS_CFG_5G			0x031e
++#define VEND1_GLOBAL_SYS_CFG_10G		0x031f
++#define VEND1_GLOBAL_SYS_CFG_10M		0x0310 /* Not on 107/109 */
++#define VEND1_GLOBAL_SYS_CFG_RATEADAPT		GENMASK(8, 7)
++#define VEND1_GLOBAL_SYS_CFG_RA_OFF		0
++#define VEND1_GLOBAL_SYS_CFG_RA_USX		1
++#define VEND1_GLOBAL_SYS_CFG_RA_PAUSE		2
++
++#define VEND1_GLOBAL_GEN_STAT2			0xc831
++#define VEND1_GLOBAL_GEN_STAT2_OP_IN_PROG	BIT(15)
++
+ #define VEND1_GLOBAL_RSVD_STAT1			0xc885
+ #define VEND1_GLOBAL_RSVD_STAT1_FW_BUILD_ID	GENMASK(7, 4)
+ #define VEND1_GLOBAL_RSVD_STAT1_PROV_ID		GENMASK(3, 0)
+@@ -127,28 +142,11 @@
+ #define VEND1_GLOBAL_INT_VEND_MASK_GLOBAL2	BIT(1)
+ #define VEND1_GLOBAL_INT_VEND_MASK_GLOBAL3	BIT(0)
+ 
+-/* registers in MDIO_MMD_VEND1 region */
+-#define AQUANTIA_VND1_GLOBAL_SC			0x000
+-#define  AQUANTIA_VND1_GLOBAL_SC_LP		BIT(0xb)
+-
+-/* global start rate, the protocol associated with this speed is used by default
+- * on SI.
++/* Sleep and timeout for checking if the Processor-Intensive
++ * MDIO operation is finished
+  */
+-#define AQUANTIA_VND1_GSTART_RATE		0x31a
+-#define  AQUANTIA_VND1_GSTART_RATE_OFF		0
+-#define  AQUANTIA_VND1_GSTART_RATE_100M		1
+-#define  AQUANTIA_VND1_GSTART_RATE_1G		2
+-#define  AQUANTIA_VND1_GSTART_RATE_10G		3
+-#define  AQUANTIA_VND1_GSTART_RATE_2_5G		4
+-#define  AQUANTIA_VND1_GSTART_RATE_5G		5
+-
+-/* SYSCFG registers for 100M, 1G, 2.5G, 5G, 10G */
+-#define AQUANTIA_VND1_GSYSCFG_BASE		0x31b
+-#define AQUANTIA_VND1_GSYSCFG_100M		0
+-#define AQUANTIA_VND1_GSYSCFG_1G		1
+-#define AQUANTIA_VND1_GSYSCFG_2_5G		2
+-#define AQUANTIA_VND1_GSYSCFG_5G		3
+-#define AQUANTIA_VND1_GSYSCFG_10G		4
++#define AQR107_OP_IN_PROG_SLEEP		1000
++#define AQR107_OP_IN_PROG_TIMEOUT	100000
+ 
+ struct aqr107_hw_stat {
+ 	const char *name;
+@@ -259,9 +257,20 @@ static int aqr_config_aneg(struct phy_device *phydev)
+ 			      phydev->advertising))
+ 		reg |= MDIO_AN_VEND_PROV_1000BASET_HALF;
+ 
++	/* Handle the case when the 2.5G and 5G speeds are not advertised */
++	if (linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
++			      phydev->advertising))
++		reg |= MDIO_AN_VEND_PROV_2500BASET_FULL;
++
++	if (linkmode_test_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
++			      phydev->advertising))
++		reg |= MDIO_AN_VEND_PROV_5000BASET_FULL;
++
+ 	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_VEND_PROV,
+ 				     MDIO_AN_VEND_PROV_1000BASET_HALF |
+-				     MDIO_AN_VEND_PROV_1000BASET_FULL, reg);
++				     MDIO_AN_VEND_PROV_1000BASET_FULL |
++				     MDIO_AN_VEND_PROV_2500BASET_FULL |
++				     MDIO_AN_VEND_PROV_5000BASET_FULL, reg);
+ 	if (ret < 0)
+ 		return ret;
+ 	if (ret > 0)
+@@ -270,59 +279,92 @@ static int aqr_config_aneg(struct phy_device *phydev)
+ 	return genphy_c45_check_and_restart_aneg(phydev, changed);
+ }
+ 
+-static struct {
+-	u16 syscfg;
+-	int cnt;
+-	u16 start_rate;
+-} aquantia_syscfg[PHY_INTERFACE_MODE_MAX] = {
+-	[PHY_INTERFACE_MODE_SGMII] =      {0x04b, AQUANTIA_VND1_GSYSCFG_1G,
+-					   AQUANTIA_VND1_GSTART_RATE_1G},
+-	[PHY_INTERFACE_MODE_2500BASEX] = {0x144, AQUANTIA_VND1_GSYSCFG_2_5G,
+-					   AQUANTIA_VND1_GSTART_RATE_2_5G},
+-	[PHY_INTERFACE_MODE_XGMII] =      {0x100, AQUANTIA_VND1_GSYSCFG_10G,
+-					   AQUANTIA_VND1_GSTART_RATE_10G},
+-	[PHY_INTERFACE_MODE_USXGMII] =    {0x080, AQUANTIA_VND1_GSYSCFG_10G,
+-					   AQUANTIA_VND1_GSTART_RATE_10G},
+-};
+-
+-/* Sets up protocol on system side before calling aqr_config_aneg */
+-static int aqr_config_aneg_set_prot(struct phy_device *phydev)
++static int aqr107_config_aneg(struct phy_device *phydev)
+ {
+-	int if_type = phydev->interface;
+-	int i;
++	bool changed = false;
++	u16 reg;
++	int ret;
++	int rateadapt1G, rateadapt2G5, rateadapt5G;
+ 
+-	if (!aquantia_syscfg[if_type].cnt)
+-		return 0;
++	if (phydev->autoneg == AUTONEG_DISABLE)
++		return genphy_c45_pma_setup_forced(phydev);
+ 
+-	/* set PHY in low power mode so we can configure protocols */
+-	phy_write_mmd(phydev, MDIO_MMD_VEND1, AQUANTIA_VND1_GLOBAL_SC,
+-		      AQUANTIA_VND1_GLOBAL_SC_LP);
+-	mdelay(10);
++	ret = genphy_c45_an_config_aneg(phydev);
++	if (ret < 0)
++		return ret;
++	if (ret > 0)
++		changed = true;
+ 
+-	/* set the default rate to enable the SI link */
+-	phy_write_mmd(phydev, MDIO_MMD_VEND1, AQUANTIA_VND1_GSTART_RATE,
+-		      aquantia_syscfg[if_type].start_rate);
++	/* If the PHY does rate adaption for the rates we permit
++	 * them in autonegotiation.
++	 * User's responsibility to match mode of MAC and PHY!
++	 */
++	rateadapt1G = 0;
++	ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_SYS_CFG_1G);
++	if (ret >= 0) {
++		rateadapt1G = !!FIELD_GET(VEND1_GLOBAL_SYS_CFG_RATEADAPT, ret);
++	}
++	rateadapt2G5 = 0;
++	ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_SYS_CFG_2G5);
++	if (ret >= 0) {
++		rateadapt2G5 = !!FIELD_GET(VEND1_GLOBAL_SYS_CFG_RATEADAPT, ret);
++	}
++	rateadapt5G = 0;
++	ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_SYS_CFG_5G);
++	if (ret >= 0) {
++		rateadapt5G = !!FIELD_GET(VEND1_GLOBAL_SYS_CFG_RATEADAPT, ret);
++	}
+ 
+-	for (i = 0; i <= aquantia_syscfg[if_type].cnt; i++) {
+-		u16 reg = phy_read_mmd(phydev, MDIO_MMD_VEND1,
+-				       AQUANTIA_VND1_GSYSCFG_BASE + i);
+-		if (!reg)
+-			continue;
++	/* Clause 45 has no standardized support for 1000BaseT, therefore
++	 * use vendor registers for this mode.
++	 */
++	reg = 0;
++	if (linkmode_test_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT,
++			      phydev->advertising) || rateadapt1G)
++		reg |= MDIO_AN_VEND_PROV_1000BASET_FULL;
+ 
+-		phy_write_mmd(phydev, MDIO_MMD_VEND1,
+-			      AQUANTIA_VND1_GSYSCFG_BASE + i,
+-			      aquantia_syscfg[if_type].syscfg);
+-	}
++	if (linkmode_test_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
++			      phydev->advertising))
++		reg |= MDIO_AN_VEND_PROV_1000BASET_HALF;
+ 
+-	if (if_type == PHY_INTERFACE_MODE_USXGMII)
+-		phy_write_mmd(phydev, MDIO_MMD_PHYXS, MDIO_PHYXS_VEND_PROV2,
+-			      MDIO_PHYXS_VEND_PROV2_USX_AN);
++	/* Handle the case when the 2.5G and 5G speeds are not advertised */
++	if (linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
++			      phydev->advertising) || rateadapt2G5)
++		reg |= MDIO_AN_VEND_PROV_2500BASET_FULL;
+ 
+-	/* wake PHY back up */
+-	phy_write_mmd(phydev, MDIO_MMD_VEND1, AQUANTIA_VND1_GLOBAL_SC, 0);
+-	mdelay(10);
++	if (linkmode_test_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
++			      phydev->advertising) || rateadapt5G)
++		reg |= MDIO_AN_VEND_PROV_5000BASET_FULL;
+ 
+-	return aqr_config_aneg(phydev);
++	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_VEND_PROV,
++				     MDIO_AN_VEND_PROV_1000BASET_HALF |
++				     MDIO_AN_VEND_PROV_1000BASET_FULL |
++				     MDIO_AN_VEND_PROV_2500BASET_FULL |
++				     MDIO_AN_VEND_PROV_5000BASET_FULL, reg);
++	if (ret < 0)
++		return ret;
++	if (ret > 0)
++		changed = true;
++
++	return genphy_c45_check_and_restart_aneg(phydev, changed);
++}
++
++static int aqr405_config_aneg(struct phy_device *phydev)
++{
++	bool changed = false;
++	u16 reg;
++	int ret;
++
++	if (phydev->autoneg == AUTONEG_DISABLE)
++		return genphy_c45_pma_setup_forced(phydev);
++
++	ret = genphy_c45_an_config_aneg(phydev);
++	if (ret < 0)
++		return ret;
++	if (ret > 0)
++		changed = true;
++
++	return genphy_c45_check_and_restart_aneg(phydev, false);
+ }
+ 
+ static int aqr_config_intr(struct phy_device *phydev)
+@@ -599,6 +641,29 @@ static int aqr107_config_init(struct phy_device *phydev)
+ 	return aqr107_set_downshift(phydev, MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT);
+ }
+ 
++static int aqr405_config_init(struct phy_device *phydev)
++{
++	int ret;
++
++	/* Check that the PHY interface type is compatible */
++	if (phydev->interface != PHY_INTERFACE_MODE_SGMII &&
++	    phydev->interface != PHY_INTERFACE_MODE_2500BASEX &&
++	    phydev->interface != PHY_INTERFACE_MODE_XGMII &&
++	    phydev->interface != PHY_INTERFACE_MODE_USXGMII &&
++	    phydev->interface != PHY_INTERFACE_MODE_10GKR &&
++	    phydev->interface != PHY_INTERFACE_MODE_10GBASER)
++		return -ENODEV;
++
++	WARN(phydev->interface == PHY_INTERFACE_MODE_XGMII,
++	     "Your devicetree is out of date, please update it. The AQR405 family doesn't support XGMII, maybe you mean USXGMII or 10GBASE-R.\n");
++
++	ret = aqr107_wait_reset_complete(phydev);
++	if (!ret)
++		aqr107_chip_info(phydev);
++
++	return aqr107_set_downshift(phydev, MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT);
++}
++
+ static int aqcs109_config_init(struct phy_device *phydev)
+ {
+ 	int ret;
+@@ -623,33 +688,33 @@ static int aqcs109_config_init(struct phy_device *phydev)
+ 	return aqr107_set_downshift(phydev, MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT);
+ }
+ 
+-static void aqr107_link_change_notify(struct phy_device *phydev)
++static int link_change_notify_common(struct phy_device *phydev)
+ {
+ 	u8 fw_major, fw_minor;
+ 	bool downshift, short_reach, afr;
+-	int mode, val;
++	int val;
+ 
+ 	if (phydev->state != PHY_RUNNING || phydev->autoneg == AUTONEG_DISABLE)
+-		return;
++		return -1;
+ 
+ 	val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_RX_LP_STAT1);
+ 	/* call failed or link partner is no Aquantia PHY */
+ 	if (val < 0 || !(val & MDIO_AN_RX_LP_STAT1_AQ_PHY))
+-		return;
++		return -1;
+ 
+ 	short_reach = val & MDIO_AN_RX_LP_STAT1_SHORT_REACH;
+ 	downshift = val & MDIO_AN_RX_LP_STAT1_AQRATE_DOWNSHIFT;
+ 
+ 	val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_RX_LP_STAT4);
+ 	if (val < 0)
+-		return;
++		return -1;
+ 
+ 	fw_major = FIELD_GET(MDIO_AN_RX_LP_STAT4_FW_MAJOR, val);
+ 	fw_minor = FIELD_GET(MDIO_AN_RX_LP_STAT4_FW_MINOR, val);
+ 
+ 	val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_RX_VEND_STAT3);
+ 	if (val < 0)
+-		return;
++		return -1;
+ 
+ 	afr = val & MDIO_AN_RX_VEND_STAT3_AFR;
+ 
+@@ -659,6 +724,21 @@ static void aqr107_link_change_notify(struct phy_device *phydev)
+ 		   downshift ? ", fast-retrain downshift advertised" : "",
+ 		   afr ? ", fast reframe advertised" : "");
+ 
++	return 0;
++}
++
++static void link_change_notify(struct phy_device *phydev)
++{
++	(void)link_change_notify_common(phydev);
++}
++
++static void aqr107_link_change_notify(struct phy_device *phydev)
++{
++	int mode, val;
++
++	if (link_change_notify_common(phydev) < 0)
++		return;
++
+ 	val = phy_read_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_RSVD_STAT9);
+ 	if (val < 0)
+ 		return;
+@@ -668,16 +748,52 @@ static void aqr107_link_change_notify(struct phy_device *phydev)
+ 		phydev_info(phydev, "Aquantia 1000Base-T2 mode active\n");
+ }
+ 
++static int aqr107_wait_processor_intensive_op(struct phy_device *phydev)
++{
++	int val, err;
++
++	/* The datasheet notes to wait at least 1ms after issuing a
++	 * processor intensive operation before checking.
++	 * We cannot use the 'sleep_before_read' parameter of read_poll_timeout
++	 * because that just determines the maximum time slept, not the minimum.
++	 */
++	usleep_range(1000, 5000);
++
++	err = phy_read_mmd_poll_timeout(phydev, MDIO_MMD_VEND1,
++					VEND1_GLOBAL_GEN_STAT2, val,
++					!(val & VEND1_GLOBAL_GEN_STAT2_OP_IN_PROG),
++					AQR107_OP_IN_PROG_SLEEP,
++					AQR107_OP_IN_PROG_TIMEOUT, false);
++	if (err) {
++		phydev_err(phydev, "timeout: processor-intensive MDIO operation\n");
++		return err;
++	}
++
++	return 0;
++}
++
+ static int aqr107_suspend(struct phy_device *phydev)
+ {
+-	return phy_set_bits_mmd(phydev, MDIO_MMD_VEND1, MDIO_CTRL1,
+-				MDIO_CTRL1_LPOWER);
++	int err;
++
++	err = phy_set_bits_mmd(phydev, MDIO_MMD_VEND1, MDIO_CTRL1,
++			       MDIO_CTRL1_LPOWER);
++	if (err)
++		return err;
++
++	return aqr107_wait_processor_intensive_op(phydev);
+ }
+ 
+ static int aqr107_resume(struct phy_device *phydev)
+ {
+-	return phy_clear_bits_mmd(phydev, MDIO_MMD_VEND1, MDIO_CTRL1,
+-				  MDIO_CTRL1_LPOWER);
++	int err;
++
++	err = phy_clear_bits_mmd(phydev, MDIO_MMD_VEND1, MDIO_CTRL1,
++				 MDIO_CTRL1_LPOWER);
++	if (err)
++		return err;
++
++	return aqr107_wait_processor_intensive_op(phydev);
+ }
+ 
+ static int aqr107_probe(struct phy_device *phydev)
+@@ -730,7 +846,7 @@ static struct phy_driver aqr_driver[] = {
+ 	.name		= "Aquantia AQR107",
+ 	.probe		= aqr107_probe,
+ 	.config_init	= aqr107_config_init,
+-	.config_aneg    = aqr_config_aneg,
++	.config_aneg    = aqr107_config_aneg,
+ 	.config_intr	= aqr_config_intr,
+ 	.handle_interrupt = aqr_handle_interrupt,
+ 	.read_status	= aqr107_read_status,
+@@ -748,7 +864,7 @@ static struct phy_driver aqr_driver[] = {
+ 	.name		= "Aquantia AQCS109",
+ 	.probe		= aqr107_probe,
+ 	.config_init	= aqcs109_config_init,
+-	.config_aneg    = aqr_config_aneg,
++	.config_aneg    = aqr107_config_aneg,
+ 	.config_intr	= aqr_config_intr,
+ 	.handle_interrupt = aqr_handle_interrupt,
+ 	.read_status	= aqr107_read_status,
+@@ -764,26 +880,56 @@ static struct phy_driver aqr_driver[] = {
+ {
+ 	PHY_ID_MATCH_MODEL(PHY_ID_AQR405),
+ 	.name		= "Aquantia AQR405",
+-	.config_aneg    = aqr_config_aneg,
++	.probe		= aqr107_probe,
++	.config_init	= aqr405_config_init,
++	.config_aneg    = aqr405_config_aneg,
+ 	.config_intr	= aqr_config_intr,
+ 	.handle_interrupt = aqr_handle_interrupt,
+-	.read_status	= aqr_read_status,
++	.read_status	= aqr107_read_status,
++	.get_tunable    = aqr107_get_tunable,
++	.set_tunable    = aqr107_set_tunable,
++	.suspend	= aqr107_suspend,
++	.resume		= aqr107_resume,
++	.get_sset_count	= aqr107_get_sset_count,
++	.get_strings	= aqr107_get_strings,
++	.get_stats	= aqr107_get_stats,
++	.link_change_notify = link_change_notify,
+ },
+ {
+-	PHY_ID_MATCH_MODEL(PHY_ID_AQR112),
+-	.name		= "Aquantia AQR112",
+-	.config_aneg    = aqr_config_aneg_set_prot,
+-	.config_intr	= aqr_config_intr,
+-	.handle_interrupt = aqr_handle_interrupt,
+-	.read_status	= aqr_read_status,
++	PHY_ID_MATCH_MODEL(PHY_ID_AQR113C),
++	.name           = "Aquantia AQR113c",
++	.probe          = aqr107_probe,
++	.config_init    = aqr107_config_init,
++	.config_aneg    = aqr107_config_aneg,
++	.config_intr    = aqr_config_intr,
++	.handle_interrupt  = aqr_handle_interrupt,
++	.read_status    = aqr107_read_status,
++	.get_tunable    = aqr107_get_tunable,
++	.set_tunable    = aqr107_set_tunable,
++	.suspend        = aqr107_suspend,
++	.resume         = aqr107_resume,
++	.get_sset_count = aqr107_get_sset_count,
++	.get_strings    = aqr107_get_strings,
++	.get_stats      = aqr107_get_stats,
++	.link_change_notify = aqr107_link_change_notify,
+ },
+ {
+-	PHY_ID_MATCH_MODEL(PHY_ID_AQR412),
+-	.name		= "Aquantia AQR412",
+-	.config_aneg    = aqr_config_aneg_set_prot,
+-	.config_intr	= aqr_config_intr,
+-	.handle_interrupt = aqr_handle_interrupt,
+-	.read_status	= aqr_read_status,
++	PHY_ID_MATCH_MODEL(PHY_ID_AQR113),
++	.name           = "Aquantia AQR113",
++	.probe          = aqr107_probe,
++	.config_init    = aqr107_config_init,
++	.config_aneg    = aqr107_config_aneg,
++	.config_intr    = aqr_config_intr,
++	.handle_interrupt  = aqr_handle_interrupt,
++	.read_status    = aqr107_read_status,
++	.get_tunable    = aqr107_get_tunable,
++	.set_tunable    = aqr107_set_tunable,
++	.suspend        = aqr107_suspend,
++	.resume         = aqr107_resume,
++	.get_sset_count = aqr107_get_sset_count,
++	.get_strings    = aqr107_get_strings,
++	.get_stats      = aqr107_get_stats,
++	.link_change_notify = aqr107_link_change_notify,
+ },
+ };
+ 
+@@ -797,8 +943,7 @@ static struct mdio_device_id __maybe_unused aqr_tbl[] = {
+ 	{ PHY_ID_MATCH_MODEL(PHY_ID_AQR107) },
+ 	{ PHY_ID_MATCH_MODEL(PHY_ID_AQCS109) },
+ 	{ PHY_ID_MATCH_MODEL(PHY_ID_AQR405) },
+-	{ PHY_ID_MATCH_MODEL(PHY_ID_AQR112) },
+-	{ PHY_ID_MATCH_MODEL(PHY_ID_AQR412) },
++	{ PHY_ID_MATCH_MODEL(PHY_ID_AQR113C) },
+ 	{ }
+ };
+ 
+-- 
+2.34.1
+

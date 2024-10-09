@@ -1,0 +1,41 @@
+From ed1cbef4b1ae31218277fb4e83bbe9604ce24ea4 Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Wed, 9 Nov 2022 09:04:37 +0100
+Subject: [PATCH 3/7] qemu-user: seccomp handling could crash
+
+ While it is not implemented properly still, it is now checked for
+and rejected properly.
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+---
+ linux-user/syscall.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 113c7e24e..6a4fc96cc 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -33,6 +33,7 @@
+ #include <sys/fsuid.h>
+ #include <sys/personality.h>
+ #include <sys/prctl.h>
++#include <linux/seccomp.h>
+ #include <sys/resource.h>
+ #include <sys/swap.h>
+ #include <linux/capability.h>
+@@ -10991,9 +10992,9 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
+ #endif /* AARCH64 */
+         case PR_GET_SECCOMP:
+         case PR_SET_SECCOMP:
+-            /* Disable seccomp to prevent the target disabling syscalls we
+-             * need. */
+-            return -TARGET_EINVAL;
++            if (arg2 == SECCOMP_MODE_FILTER)
++                return -TARGET_EINVAL;
++            return get_errno(prctl(arg1, arg2, arg3, arg4, arg5));
+         default:
+             /* Most prctl options have no pointer arguments */
+             return get_errno(prctl(arg1, arg2, arg3, arg4, arg5));
+-- 
+2.34.1
+

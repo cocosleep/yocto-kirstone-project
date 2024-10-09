@@ -1,0 +1,25 @@
+# Copyright 2021-2024 NXP
+
+MEMORY_START="0x85200000"
+MEMORY_END="0xFFFFFFFF"
+
+XEN="xen"
+XEN_CMD="console=dtuart dtuart=serial0 dom0_mem=512M dom0_max_vcpus=1 bootscrub=0 vwfi=native sched=null"
+DOM0_KERNEL="Image"
+DOM0_CMD="console=hvc0 earlycon=xen earlyprintk=xen root=/dev/mmcblk0p2 rootwait rw clk_ignore_unused"
+
+NUM_DOMUS=1
+DOMU_KERNEL[0]="Image"
+DOMU_MEM[0]=980
+DOMU_VCPUS[0]=1
+DOMU_PASSTHROUGH_DTB[0]="passthrough.dtb"
+DOMU_DIRECT_MAP[0]=1
+DOMU_STATIC_MEM[0]="0xc0800000 0xf800000 0xd0400000 0x2dc00000"
+DOMU_ENHANCED[0]=0
+
+UBOOT_SOURCE="boot.source"
+UBOOT_SCRIPT="boot.scr"
+BOOT_CMD="none"
+
+# TODO: Uncomment next line and add full path to DT node to be passthroughed (e.g. "/soc/ethernet@4033c000")
+# DOMU_PASSTHROUGH_PATHS[0]="#TODO"

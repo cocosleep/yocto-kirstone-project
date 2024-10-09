@@ -1,0 +1,12 @@
+# /etc/network/interfaces -- configuration file for ifup(8), ifdown(8)
+
+# The loopback interface
+auto lo
+iface lo inet loopback
+
+# To enable DHCP for an interface, replace "manual" with "dhcp" in iface command
+auto pfe0
+iface pfe0 inet manual
+pre-up [ -L /sys/class/net/pfe0 ]
+dhcpcd_opts -LGb
+up /sbin/ifconfig pfe0 up

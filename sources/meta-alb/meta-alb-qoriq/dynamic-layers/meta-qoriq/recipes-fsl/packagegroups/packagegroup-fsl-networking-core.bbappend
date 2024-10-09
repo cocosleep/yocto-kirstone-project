@@ -1,0 +1,4 @@
+RDEPENDS:${PN}:append = " \
+    netcat \
+"
+

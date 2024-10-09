@@ -1,0 +1,52 @@
+From 8b97e3b15aa4d458b8f66dec264819228994db95 Mon Sep 17 00:00:00 2001
+From: Ghennadi Procopciuc <ghennadi.procopciuc@nxp.com>
+Date: Wed, 17 Jan 2024 16:20:51 +0200
+Subject: [PATCH] sja1110: Add Linux kernel v6.1-rt compatibility patch
+Content-Type: text/plain; charset="us-ascii"
+
+Issue: ALB-10898
+Signed-off-by: Ghennadi Procopciuc <ghennadi.procopciuc@nxp.com>
+Signed-off-by: Ciprian Marian Costea <ciprianmarian.costea@nxp.com>
+---
+ sja1110_init.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/sja1110_init.c b/sja1110_init.c
+index b8d4eafa9f78..199cd11a3904 100644
+--- a/sja1110_init.c
++++ b/sja1110_init.c
+@@ -38,6 +38,7 @@
+ #include <linux/of_device.h>
+ #include <linux/of_gpio.h>
+ #include <linux/delay.h>
++#include <linux/version.h>
+ 
+ #include "sja1110_init.h"
+ 
+@@ -1087,7 +1088,12 @@ out:
+ 	return ret;
+ }
+ 
+-static int sja1110_remove(struct spi_device *spi)
++#if (LINUX_VERSION_CODE <= KERNEL_VERSION(6, 1, 0))
++static int
++#else
++static void
++#endif
++sja1110_remove(struct spi_device *spi)
+ {
+ 	struct sja1110_priv *sja1110;
+ 
+@@ -1101,7 +1107,9 @@ static int sja1110_remove(struct spi_device *spi)
+ 		sysfs_remove_group(&spi->dev.kobj,
+ 				   &switch_attribute_group);
+ 	
++#if (LINUX_VERSION_CODE <= KERNEL_VERSION(6, 1, 0))
+ 	return 0;
++#endif
+ }
+ 
+ static const struct of_device_id sja1110_dt_ids[] = {
+-- 
+2.43.0
+

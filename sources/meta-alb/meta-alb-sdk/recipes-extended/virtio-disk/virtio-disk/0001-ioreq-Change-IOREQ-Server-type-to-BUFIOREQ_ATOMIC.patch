@@ -1,0 +1,32 @@
+From 57f1be3105d2798883d906c379e9e8106a8f0b89 Mon Sep 17 00:00:00 2001
+From: Andrei Cherechesu <andrei.cherechesu@nxp.com>
+Date: Fri, 17 May 2024 11:57:24 +0300
+Subject: [PATCH] ioreq: Change IOREQ Server type to BUFIOREQ_ATOMIC
+
+To align with latest xen-tools changes made in order to support
+QEMU virtio backends, change the IOREQ server type requested
+by the standalone virtio-disk backend to be
+HVM_IOREQSRV_BUFIOREQ_ATOMIC.
+
+Issue: ALB-11410
+Signed-off-by: Andrei Cherechesu <andrei.cherechesu@nxp.com>
+---
+ demu.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/demu.c b/demu.c
+index b3c3372..ecbc080 100644
+--- a/demu.c
++++ b/demu.c
+@@ -913,7 +913,7 @@ demu_initialize(void)
+     DBG("%d vCPU(s)\n", demu_state.vcpus);
+ 
+     rc = xendevicemodel_create_ioreq_server(demu_state.xdh,
+-                                            demu_state.domid, HVM_IOREQSRV_BUFIOREQ_OFF,
++                                            demu_state.domid, HVM_IOREQSRV_BUFIOREQ_ATOMIC,
+                                             &demu_state.ioservid);
+     if (rc < 0)
+         goto fail6;
+-- 
+2.35.1
+

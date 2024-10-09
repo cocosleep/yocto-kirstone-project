@@ -1,0 +1,51 @@
+From 25e22db76b128cbe068edf0b140cd7924f51a6b7 Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Sat, 9 Dec 2023 20:01:54 +0100
+Subject: [PATCH] atf: LS2 boot source was not properly evaluated
+
+The PORSR1 was read before the dcfg functions were initialized.
+This caused accesses through an uninitialized pointer.
+Also SD/EMMC was not properly logged.
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+---
+ plat/nxp/soc-ls2088a/soc.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/plat/nxp/soc-ls2088a/soc.c b/plat/nxp/soc-ls2088a/soc.c
+index f8cc39226..bb9751366 100644
+--- a/plat/nxp/soc-ls2088a/soc.c
++++ b/plat/nxp/soc-ls2088a/soc.c
+@@ -238,7 +238,6 @@ void soc_preload_setup(void)
+  */
+ void soc_early_init(void)
+ {
+-	enum  boot_device dev = get_boot_dev();
+ 	dram_regions_info_t *dram_regions_info = get_dram_regions_info();
+ 
+ #ifdef CONFIG_OCRAM_ECC_EN
+@@ -259,6 +258,7 @@ void soc_early_init(void)
+ 	enable_core_tb(NXP_PMU_ADDR);
+ 	soc_interconnect_config();
+ 
++	enum boot_device dev = get_boot_dev();
+ 	/*
+ 	 * Mark the buffer for SD in OCRAM as non secure.
+ 	 * The buffer is assumed to be at end of OCRAM for
+@@ -364,11 +364,11 @@ enum boot_device get_boot_dev(void)
+ 			break;
+ 		case SDHC_VAL:
+ 			src = BOOT_DEVICE_EMMC;
+-			INFO("RCW BOOT SRC is SD/EMMC\n");
++			INFO("RCW BOOT SRC is SD\n");
+ 			break;
+ 		case EMMC_VAL:
+ 			src = BOOT_DEVICE_EMMC;
+-			INFO("RCW BOOT SRC is SD/EMMC\n");
++			INFO("RCW BOOT SRC is EMMC\n");
+ 			break;
+ 		default:
+ 			src = BOOT_DEVICE_NONE;
+-- 
+2.34.1
+

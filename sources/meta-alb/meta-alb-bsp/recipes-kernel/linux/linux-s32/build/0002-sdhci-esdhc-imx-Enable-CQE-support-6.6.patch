@@ -1,0 +1,27 @@
+From c5fe578498d8028d4c8e473dbb38a72f9123ec4e Mon Sep 17 00:00:00 2001
+From: Ciprian Costea <ciprianmarian.costea@nxp.com>
+Date: Mon, 29 Jul 2024 14:49:18 +0300
+Subject: [PATCH] sdhci-esdhc-imx: Enable CQE support
+Content-Type: text/plain; charset=UTF-8
+
+Signed-off-by: Ciprian Costea <ciprianmarian.costea@nxp.com>
+---
+ drivers/mmc/host/sdhci-esdhc-imx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/host/sdhci-esdhc-imx.c b/drivers/mmc/host/sdhci-esdhc-imx.c
+index fbce453a20e2..6b4ff6824e1b 100644
+--- a/drivers/mmc/host/sdhci-esdhc-imx.c
++++ b/drivers/mmc/host/sdhci-esdhc-imx.c
+@@ -313,7 +313,7 @@ static struct esdhc_soc_data usdhc_s32cc_data = {
+ 	.flags = ESDHC_FLAG_USDHC | ESDHC_FLAG_MAN_TUNING
+ 			| ESDHC_FLAG_HAVE_CAP1 | ESDHC_FLAG_HS200
+ 			| ESDHC_FLAG_HS400 | ESDHC_FLAG_HS400_ES
+-			| ESDHC_FLAG_SKIP_ERR004536
++			| ESDHC_FLAG_CQHCI | ESDHC_FLAG_SKIP_ERR004536
+ 			| ESDHC_FLAG_BROKEN_SDR104
+ 			| ESDHC_FLAG_SKIP_CD_WAKE,
+ };
+-- 
+2.45.2
+

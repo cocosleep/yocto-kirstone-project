@@ -1,0 +1,64 @@
+//
+// This is the default NOR flash environment for the LS1043A RDB in BlueBox mode
+//
+//----------------------------------------------------------------------
+// The following macros will be automagically replaced when building
+// the binary environment:
+//       $KERNEL_DEVICETREE         Basename of KERNEL_DEVICETREE
+//       $UBOOT_KERNEL_IMAGETYPE    UBOOT_KERNEL_IMAGETYPE if it has been set,
+//                                  otherwise KERNEL_IMAGETYPE
+//       $MACHINE                   Current MACHINE variable
+//----------------------------------------------------------------------
+//
+#include "distro_boot.txt"
+#define BOOT_SCRIPT_HDR_concat(m) hdr_##m##_bs.out
+#define BOOT_SCRIPT_HDR_eval(m) BOOT_SCRIPT_HDR_concat(m)
+#define BOOT_SCRIPT_HDR BOOT_SCRIPT_HDR_eval($MACHINE)
+#define BOOT_SCRIPT_BOARD_concat(m) m##_boot.scr
+#define BOOT_SCRIPT_BOARD_eval(m) BOOT_SCRIPT_BOARD_concat(m)
+#define BOOT_SCRIPT_BOARD BOOT_SCRIPT_BOARD_eval($MACHINE)
+BOARD=$MACHINE
+baudrate=115200
+boot_net_usb_start=usb start
+boot_pci_enum=pci enum
+boot_prefixes=/ /boot/
+boot_itbname=kernel.itb
+boot_script_dhcp=boot.scr.uimg
+boot_script_hdr=BOOT_SCRIPT_HDR
+boot_scripts=BOOT_SCRIPT_BOARD
+boot_syslinux_conf=extlinux/extlinux.conf
+
+boot_targets=nvme0 mmc0 usb0 mmc1 rcwdev
+bootdelay=3
+
+consoledev=ttyS0
+efi_dtb_prefixes=/ /dtb/ /dtb/current/
+ethact=FM1@DTSEC3
+ethprime=FM1@DTSEC3
+fdt_addr_r=0x90000000
+fdt_high=0xffffffffffffffff
+hwconfig=fsl_ddr:bank_intlv=auto
+initrd_high=0xffffffffffffffff
+kernel_addr_r=0x81000000
+kernel_name=boot/kernel.itb
+kernel_size=0x03000000
+kernel_start_nor=0x61000000
+kernelheader_addr_r=0x80200000
+kernelheader_size=0x40000
+kernelheader_start_nor=0x6600000
+load_addr=0xa0000000
+ramdisk_size=0x2000000
+
+setbootargs=setenv bootargs console=${consoledev},${baudrate} earlycon=uart8250,mmio,0x21c0500 root=/dev/${rootdev} ${bootargsextra} ${bootargs_debug}
+setrcwdev=if itest.b *0x1ee0000 -eq 0x20; then mmc dev 0; setenv rcwdev mmc0; elif itest.b *0x1ee0000 -eq 0x22; then setenv rcwdev xspi; elif itest.b *0x1ee0000 -eq 0x00; then setenv rcwdev xspi; else  setenv rcwdev nor; fi
+scriptaddr=0x80000000
+scripthdraddr=0x80080000
+soc=fsl-layerscape
+
+progfile=tftp $load_addr $file && protect off $addr +$filesize && erase $addr +$filesize && cp.b $load_addr $addr $filesize && cmp.b $load_addr $addr $filesize
+updenv=setenv addr 0x580500000;setenv file $BOARD/u-boot-flashenv-$BOARD.bin;run progfile
+
+stderr=serial
+stdin=serial
+stdout=serial
+vendor=nxp

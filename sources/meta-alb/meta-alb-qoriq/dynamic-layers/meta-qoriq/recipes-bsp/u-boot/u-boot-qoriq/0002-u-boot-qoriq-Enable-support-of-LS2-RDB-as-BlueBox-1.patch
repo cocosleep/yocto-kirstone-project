@@ -1,0 +1,27 @@
+From 2a9f621dc4186fdd7a0bd31861518c18434ffd45 Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Sat, 2 Dec 2023 20:57:23 +0100
+Subject: [PATCH 2/2] u-boot-qoriq: Enable support of LS2 RDB as BlueBox 1
+
+by adding the reference into the U-Boot files
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+---
+ arch/arm/dts/Makefile | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 39c9896c4d..5c99432e40 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -445,6 +445,7 @@ dtb-$(CONFIG_TARGET_PG_WCOM_EXPU1) += ls1021a-pg-wcom-expu1.dtb
+ dtb-$(CONFIG_FSL_LSCH3) += fsl-ls2080a-qds.dtb \
+ 	fsl-ls2080a-qds-42-x.dtb \
+ 	fsl-ls2080a-rdb.dtb \
++	fsl-ls208xa-bluebox.dtb \
+ 	fsl-ls2081a-rdb.dtb \
+ 	fsl-ls2084a-bbmini.dtb \
+ 	fsl-ls2088a-rdb-qspi.dtb \
+-- 
+2.34.1
+

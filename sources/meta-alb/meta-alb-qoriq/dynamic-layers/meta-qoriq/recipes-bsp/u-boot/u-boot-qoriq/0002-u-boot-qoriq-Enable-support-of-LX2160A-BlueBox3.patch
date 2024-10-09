@@ -1,0 +1,72 @@
+From b940670ff482fe3beddd40b2cd585bfd84c150b3 Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Sat, 2 Dec 2023 21:07:00 +0100
+Subject: [PATCH 2/2] u-boot-qoriq: Enable support of LX2160A BlueBox3
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+---
+ arch/arm/Kconfig           | 15 +++++++++++++++
+ arch/arm/cpu/armv8/Kconfig |  1 +
+ arch/arm/dts/Makefile      |  1 +
+ 3 files changed, 17 insertions(+)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 530f1911d7..e7e7ca3cc1 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1436,6 +1436,20 @@ config TARGET_LX2162AQDS
+ 	  Support for NXP LX2162AQDS platform.
+ 	  The lx2162aqds support is based on LX2160A Layerscape Architecture processor.
+ 
++config TARGET_LX2160ABLUEBOX3
++	bool "Support lx2160abluebox3"
++	select ARCH_LX2160A
++	select ARM64
++	select ARMV8_MULTIENTRY
++	select ARCH_SUPPORT_TFABOOT
++	select BOARD_LATE_INIT
++	select GPIO_EXTRA_HEADER
++	help
++	  Support for NXP BlueBox3 platform.
++	  The BlueBox 3 Reference design is a high-performance development
++	  platform that supports the QorIQ LX2160A Layerscape Architecture
++	  Processor and the S32G274A Automotive Processor
++
+ config TARGET_HIKEY
+ 	bool "Support HiKey 96boards Consumer Edition Platform"
+ 	select ARM64
+@@ -2275,6 +2289,7 @@ source "board/freescale/ls1012aqds/Kconfig"
+ source "board/freescale/ls1012ardb/Kconfig"
+ source "board/freescale/ls1012afrdm/Kconfig"
+ source "board/freescale/lx2160a/Kconfig"
++source "board/freescale/lx2160abluebox3/Kconfig"
+ source "board/grinn/chiliboard/Kconfig"
+ source "board/hisilicon/hikey/Kconfig"
+ source "board/hisilicon/hikey960/Kconfig"
+diff --git a/arch/arm/cpu/armv8/Kconfig b/arch/arm/cpu/armv8/Kconfig
+index 82c4c61507..c3f8a3d561 100644
+--- a/arch/arm/cpu/armv8/Kconfig
++++ b/arch/arm/cpu/armv8/Kconfig
+@@ -116,6 +116,7 @@ config PSCI_RESET
+ 		   !TARGET_LS1046AFRWY && \
+ 		   !TARGET_LS2081ARDB && !TARGET_LX2160ARDB && \
+ 		   !TARGET_LX2160AQDS && !TARGET_LX2162AQDS && \
++		   !TARGET_LX2160ABLUEBOX3 && \
+ 		   !ARCH_UNIPHIER
+ 	help
+ 	  Most armv8 systems have PSCI support enabled in EL3, either through
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 5c99432e40..d4a3839bd5 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -468,6 +468,7 @@ dtb-$(CONFIG_FSL_LSCH3) += fsl-ls2080a-qds.dtb \
+ 	fsl-lx2160a-qds-20-11-x.dtb \
+ 	fsl-lx2160a-qds-13-x-x.dtb \
+ 	fsl-lx2160a-qds-14-x-x.dtb \
++	fsl-lx2160a-bluebox3.dtb \
+ 	fsl-lx2162a-qds.dtb\
+ 	fsl-lx2162a-qds-17-x.dtb\
+ 	fsl-lx2162a-qds-18-x.dtb\
+-- 
+2.34.1
+

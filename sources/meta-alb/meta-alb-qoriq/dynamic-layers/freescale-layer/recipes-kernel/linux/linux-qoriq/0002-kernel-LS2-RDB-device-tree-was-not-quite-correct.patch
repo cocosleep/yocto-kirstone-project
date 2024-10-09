@@ -1,0 +1,39 @@
+From 15a0c0e517947d9261a427d6078627c737cf7d5b Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Tue, 27 Dec 2022 17:35:09 +0100
+Subject: [PATCH 2/2] kernel: LS2 RDB device tree was not quite correct
+
+The WD chip for fan control was missing
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-ls208xa-rdb.dtsi | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-ls208xa-rdb.dtsi b/arch/arm64/boot/dts/freescale/fsl-ls208xa-rdb.dtsi
+index a752f06a2e74..cedb2ae2e0ef 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-ls208xa-rdb.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-ls208xa-rdb.dtsi
+@@ -85,6 +85,19 @@ adt7481@4c {
+ 				reg = <0x4c>;
+ 			};
+ 		};
++
++		i2c@5 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x5>;
++
++			/* This should be at 0x2f, but bad pullups on
++			 * the PCB put it to 0x2c */
++			monitor@2c {
++				compatible = "w83793";
++				reg = <0x2c>;
++			};
++		};
+ 	};
+ };
+ 
+-- 
+2.34.1
+

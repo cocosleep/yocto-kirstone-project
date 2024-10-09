@@ -1,0 +1,80 @@
+From 9a5cc319d9b27e004af327493071cd1d8a7f0fe3 Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Sat, 2 Dec 2023 20:47:19 +0100
+Subject: [PATCH 2/2] u-boot: Enable BB Mini configuration
+
+... by adding the references into the U-Boot files
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+---
+ arch/arm/Kconfig           | 21 +++++++++++++++++++++
+ arch/arm/cpu/armv8/Kconfig |  1 +
+ arch/arm/dts/Makefile      |  1 +
+ 3 files changed, 23 insertions(+)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 881d444bc9..530f1911d7 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1375,6 +1375,26 @@ config TARGET_LS2081ARDB
+ 	  development platform that supports the QorIQ LS2081A/LS2041A
+ 	  Layerscape Architecture processor.
+ 
++config TARGET_LS2084ABBMINI
++	bool "Support ls2084abbmini"
++	select ARCH_LS2080A
++	select ARM64
++	select ARMV8_MULTIENTRY
++	select ARCH_SUPPORT_TFABOOT
++	select BOARD_LATE_INIT
++	select SUPPORT_SPL
++	select FSL_DDR_BIST
++	select FSL_DDR_INTERACTIVE if !SPL
++	select GPIO_EXTRA_HEADER
++	imply SCSI
++	imply SCSI_AHCI
++	help
++	  Support for NXP BlueBox Mini platform.
++	  The BlueBox Mini Reference design is a high-performance
++	  development platform that supports the QorIQ LS2084A
++	  Layerscape Architecture processor, teh S32V234 automotive
++	  processor, and the S32R27 ASIL-D capable MCU.
++
+ config TARGET_LX2160ARDB
+ 	bool "Support lx2160ardb"
+ 	select ARCH_LX2160A
+@@ -2240,6 +2260,7 @@ source "board/emulation/qemu-arm/Kconfig"
+ source "board/freescale/ls2080aqds/Kconfig"
+ source "board/freescale/ls2080ardb/Kconfig"
+ source "board/freescale/ls1088a/Kconfig"
++source "board/freescale/ls2084abbmini/Kconfig"
+ source "board/freescale/ls1028a/Kconfig"
+ source "board/freescale/ls1021aqds/Kconfig"
+ source "board/freescale/ls1043aqds/Kconfig"
+diff --git a/arch/arm/cpu/armv8/Kconfig b/arch/arm/cpu/armv8/Kconfig
+index 9967376eca..82c4c61507 100644
+--- a/arch/arm/cpu/armv8/Kconfig
++++ b/arch/arm/cpu/armv8/Kconfig
+@@ -105,6 +105,7 @@ config PSCI_RESET
+ 	depends on !ARCH_APPLE && !ARCH_BCM283X && !ARCH_EXYNOS7 && \
+ 		   !TARGET_LS2080AQDS && \
+ 		   !TARGET_LS2080ARDB && !TARGET_LS2080A_EMU && \
++		   !TARGET_LS2084ABBMINI && \
+ 		   !TARGET_LS1088ARDB && !TARGET_LS1088AQDS && \
+ 		   !TARGET_LS1012ARDB && !TARGET_LS1012AFRDM && \
+ 		   !TARGET_LS1012A2G5RDB && !TARGET_LS1012AQDS && \
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 709fdaecd7..39c9896c4d 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -446,6 +446,7 @@ dtb-$(CONFIG_FSL_LSCH3) += fsl-ls2080a-qds.dtb \
+ 	fsl-ls2080a-qds-42-x.dtb \
+ 	fsl-ls2080a-rdb.dtb \
+ 	fsl-ls2081a-rdb.dtb \
++	fsl-ls2084a-bbmini.dtb \
+ 	fsl-ls2088a-rdb-qspi.dtb \
+ 	fsl-ls1088a-rdb.dtb \
+ 	fsl-ls1088a-qds.dtb \
+-- 
+2.34.1
+

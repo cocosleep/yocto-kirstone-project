@@ -1,0 +1,57 @@
+From eb209b292524344d618b5fe99019db1dfe12535e Mon Sep 17 00:00:00 2001
+From: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Date: Mon, 11 Dec 2023 07:46:54 +0100
+Subject: [PATCH] GCC complains about printf types and fails to compile
+
+If debug logging is enabled, a few printf patterns used fail to
+compile. This patch tries to tweak the patterns so that they match the
+printed types better.
+
+Issue: ALB-10847
+Issue: ALB-10962
+
+Signed-off-by: Heinz Wrobel <Heinz.Wrobel@nxp.com>
+Signed-off-by: Florin Buica <florin.buica@nxp.com>
+---
+ drivers/nxp/sd/sd_mmc.c                | 4 ++--
+ lib/xlat_tables_v2/xlat_tables_utils.c | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/nxp/sd/sd_mmc.c b/drivers/nxp/sd/sd_mmc.c
+index f7f48e723..b508206a3 100644
+--- a/drivers/nxp/sd/sd_mmc.c
++++ b/drivers/nxp/sd/sd_mmc.c
+@@ -1348,7 +1348,7 @@ int esdhc_read(struct mmc *mmc, uint32_t src_offset, uintptr_t dst, size_t size)
+ 
+ #ifdef NXP_SD_DEBUG
+ 	INFO("sd mmc read\n");
+-	INFO("src = %x, dst = %lxsize = %lu\n", src_offset, dst, size);
++	INFO("src = %x, dst = %lx size = %lu\n", src_offset, dst, size);
+ #endif
+ 
+ 	/* check for size */
+@@ -1410,7 +1410,7 @@ int esdhc_write(struct mmc *mmc, uintptr_t src, uint32_t dst_offset,
+ 
+ #ifdef NXP_SD_DEBUG
+ 	INFO("sd mmc write\n");
+-	INFO("src = %x, dst = %lxsize = %lu\n", src, dst_offset, size);
++	INFO("src = %lx, dst = %x size = %lu\n", src, dst_offset, size);
+ #endif
+ 
+ 	/* check for size */
+diff --git a/lib/xlat_tables_v2/xlat_tables_utils.c b/lib/xlat_tables_v2/xlat_tables_utils.c
+index df1738642..612a8adce 100644
+--- a/lib/xlat_tables_v2/xlat_tables_utils.c
++++ b/lib/xlat_tables_v2/xlat_tables_utils.c
+@@ -199,7 +199,7 @@ static void xlat_tables_print_internal(xlat_ctx_t *ctx, uintptr_t table_base_va,
+ 					(uint64_t *)addr_inner,
+ 					XLAT_TABLE_ENTRIES, level + 1U);
+ 			} else {
+-				printf("%sVA:0x%lx PA:0x%llx size:0x%zx ",
++				printf("%sVA:0x%lx PA:0x%lx size:0x%zx ",
+ 				       level_spacers[level], table_idx_va,
+ 				       (uint64_t)(desc & TABLE_ADDR_MASK),
+ 				       level_size);
+-- 
+2.25.1
+
